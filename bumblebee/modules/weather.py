@@ -20,6 +20,7 @@ import json
 import time
 try:
     import requests
+    from requests.exceptions import RequestException
 except ImportError:
     pass
 
@@ -34,6 +35,7 @@ class Module(bumblebee.engine.Module):
         self._interval = int(self.parameter("interval", "15"))
         self._unit = self.parameter("unit", "metric")
         self._nextcheck = 0
+        self._valid = False
 
     def _unit_suffix(self):
         if self._unit == "metric":
@@ -45,22 +47,28 @@ class Module(bumblebee.engine.Module):
         return ""
 
     def temperature(self, widget):
+        if not self._valid:
+            return u"?"
         return u"{}°{}".format(self._temperature, self._unit_suffix())
 
     def update(self, widgets):
         timestamp = int(time.time())
         if self._nextcheck < int(time.time()):
-            self._nextcheck = int(time.time()) + self._interval*60
-            weather_url = "http://api.openweathermap.org/data/2.5/weather?appid={}".format(self._apikey)
-            weather_url = "{}&units={}".format(weather_url, self._unit)
-            if self._location == "auto":
-                location_url = "http://ipinfo.io/json"
-                location = json.loads(requests.get(location_url).text)
-                coord = location["loc"].split(",")
-                weather_url = "{url}&lat={lat}&lon={lon}".format(url=weather_url, lat=coord[0], lon=coord[1])
-            else:
-                weather_url = "{url}&q={city}".format(url=weather_url, city=self._location)
-            weather = json.loads(requests.get(weather_url).text)
-            self._temperature = int(weather['main']['temp'])
+            try:
+                self._nextcheck = int(time.time()) + self._interval*60
+                weather_url = "http://api.openweathermap.org/data/2.5/weather?appid={}".format(self._apikey)
+                weather_url = "{}&units={}".format(weather_url, self._unit)
+                if self._location == "auto":
+                    location_url = "http://ipinfo.io/json"
+                    location = json.loads(requests.get(location_url).text)
+                    coord = location["loc"].split(",")
+                    weather_url = "{url}&lat={lat}&lon={lon}".format(url=weather_url, lat=coord[0], lon=coord[1])
+                else:
+                    weather_url = "{url}&q={city}".format(url=weather_url, city=self._location)
+                weather = json.loads(requests.get(weather_url).text)
+                self._temperature = int(weather['main']['temp'])
+                self._valid = True
+            except RequestException:
+                self._valid = False
 
 # vim: tabstop=8 expandtab shiftwidth=4 softtabstop=4
